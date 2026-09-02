@@ -1,0 +1,26 @@
+{
+  "name": "upnote-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for UpNote. Lets Claude and other MCP clients read your notes and create new ones.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ahmed Al-Obaidi",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "upnote",
+    "notes",
+    "claude",
+    "sqlite"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test-client.mjs read"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules/
+
+# never let a real note database or a snapshot of one into the repo
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+.env
+.DS_Store
+Thumbs.db
