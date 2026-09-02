@@ -59,6 +59,18 @@ backslashes. A single backslash breaks the JSON.
 
 Fully quit and reopen it. Then ask Claude "what UpNote notebooks do I have?" to check it works.
 
+### Or let Claude Code do all three
+
+If you already have Claude Code, point it at this repo and ask it to install it:
+
+> Clone https://github.com/ahmedco88/upnote-mcp, run npm install, then register it as an MCP
+> server called "upnote" pointing at server.mjs. I'm on Windows / macOS. Show me the config
+> change before you make it.
+
+It handles the clone, the install, and finding and editing the right config file, which is the
+step most people get wrong. Ask to see the change first so you know what it edited. You still
+have to restart the client yourself.
+
 ---
 
 ## Using it
