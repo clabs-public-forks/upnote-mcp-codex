@@ -1,5 +1,16 @@
 node_modules/
 
+# THIS REPO IS PUBLIC. These are Ahmed's private working notes and must never
+# be committed. README.md and LICENSE are the only Markdown files that ship.
+CLAUDE.md
+memory.md
+memory-archive.md
+progress.md
+learnings.md
+learnings-archive.md
+*.backup-*
+
+
 # never let a real note database or a snapshot of one into the repo
 *.sqlite3
 *.sqlite3-wal
