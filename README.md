@@ -1,6 +1,10 @@
 # upnote-mcp-codex
 
-An unofficial, Codex CLI focused [Model Context Protocol](https://modelcontextprotocol.io/) server for local [UpNote](https://getupnote.com/) data. It reads the notes that UpNote has synced to this computer and dispatches create, open, and navigation requests through UpNote's `upnote://` URL scheme. It does not use an account, cloud API, HTTP service, authentication layer, or plugin packaging.
+`upnote-mcp-codex` is an unofficial Codex CLI-specific MCP server for the [UpNote](https://getupnote.com/) notetaking app.
+
+This repo is a forked refactor of [ahmedco88's UpNote MCP server for Claude Code](https://github.com/ahmedco88/upnote-mcp).
+
+This MCP server reads the notes that UpNote has synced to your computer and dispatches create, open, and navigation requests through UpNote's `upnote://` URL scheme. It does not use an account, cloud API, HTTP service, authentication layer, or plugin packaging.
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by UpNote or Thomas Dao. It reads an undocumented local database that may change in a future UpNote release. Back up your notes.
 
@@ -11,7 +15,7 @@ URL support follows UpNote's [official x-callback-url endpoint reference](https:
 You need UpNote, Node 22.13 or later, and Codex CLI. From a checkout:
 
 ```bash
-git clone https://github.com/ahmedco88/upnote-mcp.git
+git clone https://github.com/clabs-public-forks/upnote-mcp-codex.git
 cd upnote-mcp
 npm ci
 ```
@@ -19,7 +23,7 @@ npm ci
 Register the server with an absolute path to `server.mjs`:
 
 ```bash
-codex mcp add upnote -- node /absolute/path/to/upnote-mcp/server.mjs
+codex mcp add upnote -- node ${PWD}/server.mjs
 ```
 
 This command writes the server entry to Codex's MCP configuration. The equivalent manual configuration is:
@@ -85,7 +89,7 @@ Create an UpNote note titled "Meeting ideas" in the "Work" notebook with this co
 ```
 
 ```text
-Open the UpNote tag "待处理".
+Open the UpNote tag "School".
 ```
 
 Codex maps these requests to the available MCP tools. If you need to be explicit, the corresponding tool calls look like this:
