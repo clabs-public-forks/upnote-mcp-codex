@@ -12,7 +12,7 @@ import { createLauncher } from "./launcher.mjs";
 import { createToolService } from "./tools.mjs";
 
 const config = loadConfig();
-const database = new SnapshotDatabase({ sourcePath: config.databasePath, snapshotBaseDir: config.snapshotBaseDir });
+const database = new SnapshotDatabase({ sourcePath: () => config.databasePath, snapshotBaseDir: config.snapshotBaseDir });
 const service = createToolService({ database, launcher: createLauncher(), config });
 const instructions = [
   "UpNote MCP reads the local data that UpNote has synced to this computer.",

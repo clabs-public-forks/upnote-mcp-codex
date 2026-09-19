@@ -55,7 +55,7 @@ export function loadConfig({ env = process.env, platform = process.platform, hom
     ...DEFAULTS,
     defaultNotebook: env.UPNOTE_DEFAULT_NOTEBOOK || DEFAULTS.defaultNotebook,
     urlLimit,
-    databasePath: findDatabase({ env, platform, homeDir }),
+    get databasePath() { return findDatabase({ env, platform, homeDir }); },
     snapshotBaseDir,
   });
 }

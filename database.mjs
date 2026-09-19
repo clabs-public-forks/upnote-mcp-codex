@@ -59,6 +59,7 @@ export class SnapshotDatabase {
 
   getDatabase() {
     if (this.closed) throw new Error("The UpNote snapshot has been closed.");
+    if (typeof this.sourcePath === "function") this.sourcePath = this.sourcePath();
     const current = metadataSet(this.fileSystem, this.sourcePath);
     if (!current[""].exists) {
       throw new Error(`UpNote database not found at ${this.sourcePath}. Set UPNOTE_DB to the full path of upnote.sqlite3.`);
@@ -115,13 +116,14 @@ export class SnapshotDatabase {
       // next query will refresh again if UpNote changed after that point.
       copiedMetadata = copiedMetadata || lastStart;
     }
+    let opened;
     try {
-      const opened = this.databaseFactory(this.snapshotPath);
+      opened = this.databaseFactory(this.snapshotPath);
       validateSnapshot(opened);
       this.database = opened;
       this.lastMetadata = copiedMetadata;
     } catch (error) {
-      try { this.database?.close(); } catch { /* already closed */ }
+      try { opened?.close(); } catch { /* already closed */ }
       this.database = null;
       throw new Error(`The copied UpNote snapshot could not be opened or validated: ${error.message}`);
     }

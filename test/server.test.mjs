@@ -202,6 +202,71 @@ test("snapshot refresh retries unstable copies, isolates processes, and cleans u
   unstable.close();
 });
 
+test("database discovery failures preserve URL tools and can be retried", async t => {
+  const fixture = makeFixture();
+  t.after(() => fixture.live.close());
+  for (const platform of ["linux", "darwin", "win32"]) {
+    const env = {};
+    const config = loadConfig({ env, platform, homeDir: fixture.root, tempDir: fixture.root });
+    const database = new SnapshotDatabase({ sourcePath: () => config.databasePath, snapshotBaseDir: config.snapshotBaseDir });
+    t.after(() => database.close());
+    const launches = [];
+    const service = createToolService({ database, config, launcher: { open: async url => launches.push(url) } });
+    assert.equal(service.definitions.length, 10);
+    for (const [name, args] of [
+      ["upnote_create_note", { title: "Test", content: "Test content" }],
+      ["upnote_create_notebook", { title: "Test" }],
+      ["upnote_open_note", { id: "n1" }],
+    ]) {
+      const response = await service.call(name, args);
+      assert.equal(response.isError, undefined, textOf(response));
+    }
+    assert.equal(launches.length, 3);
+    const failed = await service.call("upnote_list_notebooks");
+    assert.equal(failed.isError, true);
+    assert.match(textOf(failed), /UPNOTE_DB/);
+    env.UPNOTE_DB = fixture.sourcePath;
+    const recovered = await service.call("upnote_list_notebooks");
+    assert.equal(recovered.structuredContent.count, 3);
+  }
+});
+
+test("failed snapshot validation closes each opened handle before retry and cleanup", t => {
+  const fixture = makeFixture();
+  t.after(() => fixture.live.close());
+  for (const failure of ["integrity", "tables"]) {
+    const handles = [];
+    const database = new SnapshotDatabase({
+      sourcePath: fixture.sourcePath,
+      snapshotBaseDir: fixture.root,
+      databaseFactory: file => {
+        assert.ok(handles.every(handle => !handle.isOpen));
+        const handle = new DatabaseSync(file);
+        handles.push(handle);
+        if (failure === "tables") handle.exec("DROP TABLE lists");
+        return {
+          prepare: sql => failure === "integrity" && sql === "PRAGMA integrity_check"
+            ? { get: () => ({ integrity_check: "corrupt" }) }
+            : handle.prepare(sql),
+          close: () => handle.close(),
+        };
+      },
+    });
+    t.after(() => {
+      for (const handle of handles) if (handle.isOpen) handle.close();
+      database.close();
+    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      assert.throws(() => database.all("SELECT 1"), failure === "integrity" ? /integrity_check failed/ : /required table lists is missing/);
+      assert.equal(database.database, null);
+      assert.ok(handles.every(handle => !handle.isOpen));
+    }
+    assert.equal(handles.length, 2);
+    database.close();
+    assert.equal(fs.existsSync(database.snapshotDir), false);
+  }
+});
+
 test("platform detection and shell-free launcher branches are covered", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "upnote-mcp-platform-"));
   tempRoots.push(root);
