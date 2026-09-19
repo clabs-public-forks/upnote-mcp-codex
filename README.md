@@ -49,6 +49,12 @@ Register the server with an absolute path to `server.mjs`:
 codex mcp add upnote -- node ${PWD}/server.mjs
 ```
 
+On Linux, pass the path to `upnote.sqlite3` with `--env` (typically `~/.config/UpNote/upnote.sqlite3`):
+
+```bash
+codex mcp add upnote --env UPNOTE_DB="${HOME}/.config/UpNote/upnote.sqlite3" -- node ${PWD}/server.mjs
+```
+
 This command writes the server entry to Codex's MCP configuration. The equivalent manual configuration is:
 
 ```toml
@@ -57,9 +63,13 @@ command = "node"
 args = ["/absolute/path/to/upnote-mcp/server.mjs"]
 startup_timeout_sec = 10
 tool_timeout_sec = 60
+
+# Required on Linux (and optional on other platforms to override auto-discovery)
+[mcp_servers.upnote.env]
+UPNOTE_DB = "/home/you/.config/UpNote/upnote.sqlite3"
 ```
 
-The normal user configuration is `~/.codex/config.toml`. A project-scoped `.codex/config.toml` is also supported for a trusted project. Do not put a library path or other private value in a repository that others can read. This project does not edit either configuration file or register itself automatically.
+The normal user configuration is `~/.codex/config.toml`. A project-scoped `.codex/config.toml` is also supported for a trusted project if you prefer the MCP server to only be active within a specific repository. Ensure `.codex/` is listed in `.gitignore` so machine-specific paths are not committed. This project does not edit either configuration file or register itself automatically.
 
 On Windows, quote the absolute path in the command and use a path that your `node` installation can read, for example:
 
@@ -186,11 +196,11 @@ UPNOTE_URL_LIMIT = "100000"
 
 | Setting | Default | Function |
 | --- | --- | --- |
-| `UPNOTE_DB` | Platform detection | Full path to `upnote.sqlite3`. Required on Linux and other unsupported platforms. |
+| `UPNOTE_DB` | Platform detection | Full path to `upnote.sqlite3`. Required on Linux (typically `~/.config/UpNote/upnote.sqlite3`) and other unsupported platforms. |
 | `UPNOTE_SNAPSHOT_DIR` | System temporary directory | Private parent directory for a unique per-process snapshot directory. |
 | `UPNOTE_URL_LIMIT` | `100000` | Maximum encoded URL length for every URL dispatch, including navigation. Must be a positive integer. |
 
-Database detection is limited to the current platform. Windows checks the Microsoft Store and installer locations; macOS checks the documented application container path. Linux does not guess an undocumented storage location and requires `UPNOTE_DB`.
+Database detection is limited to the current platform. Windows checks the Microsoft Store and installer locations; macOS checks the documented application container path. Linux does not guess an undocumented storage location and requires `UPNOTE_DB` (on Linux, UpNote commonly stores the database at `~/.config/UpNote/upnote.sqlite3`).
 
 The server copies `upnote.sqlite3`, `upnote.sqlite3-wal`, and `upnote.sqlite3-shm` into a unique process-owned directory, opens the completed copy, validates it, and never writes to UpNote's source files. It compares metadata for each source file and retries an unstable copy up to three times. Normal disconnect or termination removes only that process-owned directory. Abrupt termination can leave temporary files.
 
