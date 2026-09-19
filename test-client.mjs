@@ -9,7 +9,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import path from "node:path";
 
 const mode = process.argv[2] || "read";
-const NOTEBOOK = process.env.TEST_NOTEBOOK || "Claude Notes";
+const NOTEBOOK = process.env.TEST_NOTEBOOK || "Codex Notes";
 const QUERY = process.env.TEST_QUERY || "test";
 const server = path.join(import.meta.dirname, "server.mjs");
 

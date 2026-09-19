@@ -1,216 +1,138 @@
-# upnote-mcp
+# upnote-mcp-codex
 
-Let Claude read and write your [UpNote](https://getupnote.com/) notes.
+An unofficial, Codex CLI focused [Model Context Protocol](https://modelcontextprotocol.io/) server for local [UpNote](https://getupnote.com/) data. It reads the notes that UpNote has synced to this computer and dispatches create or open requests through UpNote's `upnote://` URL scheme. It does not use an account, cloud API, HTTP service, authentication layer, or plugin packaging.
 
-Ask Claude to "save this to UpNote", or "summarise my Cardiology notebook", and it works.
-Everything runs on your own machine. No account, no cloud, no API key.
+> **Unofficial.** This project is not affiliated with, endorsed by, or supported by UpNote or Thomas Dao. It reads an undocumented local database that may change in a future UpNote release. Back up your notes.
 
-> **Unofficial.** Not affiliated with, endorsed by, or supported by UpNote or Thomas Dao.
-> UpNote is their trademark, used here only to say what this connects to. It reads an
-> undocumented local database, which can change in any UpNote update. Back up your notes.
+## Setup with Codex CLI
 
----
-
-## Setup
-
-You need **UpNote** installed, and **Node 22.13 or later** (`node --version` to check).
-
-### 1. Download it
+You need UpNote, Node 22.13 or later, and Codex CLI. From a checkout:
 
 ```bash
 git clone https://github.com/ahmedco88/upnote-mcp.git
 cd upnote-mcp
-npm install
+npm ci
 ```
 
-Note the full path to the folder. You need it in the next step.
-
-### 2. Add it to your config file
-
-Find your config file:
-
-| Client | Windows | macOS |
-| --- | --- | --- |
-| Claude Desktop | `%APPDATA%\Claude\claude_desktop_config.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Claude Code | `~/.claude.json` | `~/.claude.json` |
-
-If you use both, add it to both. They are separate files and neither reads the other.
-
-Paste this in, changing only the path to `server.mjs`:
-
-```json
-{
-  "mcpServers": {
-    "upnote": {
-      "command": "node",
-      "args": ["/full/path/to/upnote-mcp/server.mjs"]
-    }
-  }
-}
-```
-
-If the file already has an `mcpServers` section, add the `"upnote"` block inside it rather
-than pasting a second `mcpServers`.
-
-**Windows paths:** use forward slashes (`C:/Users/you/upnote-mcp/server.mjs`) or double
-backslashes. A single backslash breaks the JSON.
-
-### 3. Restart your client
-
-Fully quit and reopen it. Then ask Claude "what UpNote notebooks do I have?" to check it works.
-
-### Or let Claude Code do all three
-
-If you already have Claude Code, point it at this repo and ask it to install it:
-
-> Clone https://github.com/ahmedco88/upnote-mcp, run npm install, then register it as an MCP
-> server called "upnote" pointing at server.mjs. I'm on Windows / macOS. Show me the config
-> change before you make it.
-
-It handles the clone, the install, and finding and editing the right config file, which is the
-step most people get wrong. Ask to see the change first so you know what it edited. You still
-have to restart the client yourself.
-
----
-
-## Using it
-
-Just ask in plain language:
-
-- "Save this conversation to UpNote"
-- "Save this to UpNote in my Recipes notebook"
-- "Search my notes for anything about sourdough"
-- "Summarise my Travel notebook"
-
-New notes go to a notebook called `Claude Notes` unless you name another one. Change that
-default with the `UPNOTE_DEFAULT_NOTEBOOK` setting below.
-
-### What it can do
-
-| Tool | What it does |
-| --- | --- |
-| `upnote_create_note` | Create a note from a title and Markdown body. |
-| `upnote_create_notebook` | Create a notebook. |
-| `upnote_list_notebooks` | List notebooks with note counts. |
-| `upnote_list_notes` | List the notes in a notebook. |
-| `upnote_search_notes` | Search titles and bodies, optionally within one notebook. |
-| `upnote_get_note` | Read one note in full. |
-| `upnote_recent_notes` | Most recently updated notes. |
-| `upnote_list_tags` | List tags. |
-| `upnote_open_note` | Open a note in the UpNote app. |
-| `upnote_open_notebook` | Open a notebook in the UpNote app. |
-
-### What it cannot do
-
-These are UpNote's limits, not this server's. UpNote's automation only offers "create note"
-and "create notebook", so:
-
-- **No editing or appending.** Existing notes cannot be changed. New notes only.
-- **No tags on creation.** Add them yourself afterwards.
-- Creating a note brings UpNote to the front and opens the new note. Expected.
-- Reads only see what has synced to that computer. Phone notes appear after that machine syncs.
-
----
-
-## Settings
-
-All optional. Add them as an `"env"` block inside the `"upnote"` config above:
-
-```json
-"env": { "UPNOTE_DEFAULT_NOTEBOOK": "My Inbox" }
-```
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| `UPNOTE_DEFAULT_NOTEBOOK` | `Claude Notes` | Where notes go when you don't name a notebook. |
-| `UPNOTE_DB` | auto-detected | Path to `upnote.sqlite3`. Set only if detection fails. |
-| `UPNOTE_SNAPSHOT_DIR` | system temp folder | Where the note snapshot is kept. See below. |
-| `UPNOTE_URL_LIMIT` | `100000` | Refuse notes longer than this, to avoid silent truncation. |
-
-Auto-detected database locations:
-
-- Windows (Store): `%LOCALAPPDATA%\Packages\24862ThomasDao.UpNote_kq65c2wy2rx02\LocalCache\Roaming\UpNote\upnote.sqlite3`
-- Windows (installer): `%APPDATA%\UpNote\upnote.sqlite3`
-- macOS: `~/Library/Containers/com.getupnote.mac/Data/Library/Application Support/UpNote/upnote.sqlite3`
-
----
-
-## Before you trust it with private notes
-
-- **It leaves a copy of all your notes in your temp folder.** Reading works from a snapshot
-  copy, and nothing deletes it afterwards. Anything that can read your temp folder can read
-  your whole library. On a shared or work machine, set `UPNOTE_SNAPSHOT_DIR` to somewhere
-  only you can read.
-- **Note text passes through a process command line** when creating a note. On Windows, other
-  local processes can read that.
-- It never writes to UpNote's own database file. Reading cannot corrupt your notes. Writing
-  goes through UpNote's public URL scheme, so UpNote itself does the writing.
-
----
-
-## Troubleshooting
-
-**Claude says it has no UpNote tools.** The config file was not saved, has a JSON syntax error,
-or the client was not fully restarted. Check the path to `server.mjs` is correct and absolute.
-
-**"UpNote database not found".** Auto-detection failed. Find `upnote.sqlite3` yourself and set
-`UPNOTE_DB` to its full path.
-
-**`Cannot find module 'node:sqlite'`.** Your Node is older than 22.13. Upgrade it.
-
-**Every notebook shows 0 notes, or notes look old.** You are probably running a different tool,
-not this one. See the notes below on WAL and notebook membership.
-
-**Nothing happens when Claude creates a note.** UpNote must be installed and the `upnote://`
-scheme registered, which normal installs do automatically.
-
----
-
-## For anyone building something similar
-
-Four things cost real time here, and none of them produce an error message.
-
-**UpNote runs SQLite in WAL mode.** Recent notes live in `upnote.sqlite3-wal`, not the main
-file. Copy `upnote.sqlite3` alone and you get a stale snapshot, in testing months out of date,
-silently. Copy `.sqlite3`, `-wal` and `-shm` together, and open the copy **read-write** so
-SQLite can replay the log. A read-only handle cannot replay a WAL, so opening read-only "for
-safety" is exactly what serves you the old data.
-
-**Notebook membership is not where you would look.** The `organizers` table is empty, and
-`notebooks.notes` is `[]` on every row. It lives in the `lists` table, in rows keyed
-`notebooks_<notebookId>`, each holding a JSON array of note ids:
-
-```sql
-SELECT nb.title, COUNT(*) FROM lists l
-JOIN notebooks nb ON nb.id = replace(l.id, 'notebooks_', '')
-, json_each(l.content) j
-JOIN notes n ON n.id = j.value AND COALESCE(n.trashed, 0) = 0
-WHERE l.id LIKE 'notebooks_%' GROUP BY nb.title;
-```
-
-**Trashed notes are in the same table**, around 60 percent of rows in one real library. Filter
-`COALESCE(trashed, 0) = 0` or every count is wrong.
-
-**Opening the URL:** callback URLs contain `&` separators. On Windows this uses
-`rundll32 url.dll,FileProtocolHandler <url>` with the URL as a single argv entry, so no shell
-parses it and the 8191 character command line limit does not apply. 32,000 characters of note
-content were verified intact end to end. macOS uses `open`, Linux `xdg-open`.
-
-## Platform support
-
-Built and tested on Windows 11 with the Microsoft Store build of UpNote. macOS and Linux have
-code paths for both the database location and the URL opener, but they are **untested**.
-Reports welcome.
-
-## Test
+Register the server with an absolute path to `server.mjs`:
 
 ```bash
-node test-client.mjs read     # side effect free
-node test-client.mjs write    # creates real notes you will have to trash by hand
+codex mcp add upnote -- node /absolute/path/to/upnote-mcp/server.mjs
 ```
 
-Override the fixtures with `TEST_NOTEBOOK` and `TEST_QUERY`.
+This command writes the server entry to Codex's MCP configuration. The equivalent manual configuration is:
+
+```toml
+[mcp_servers.upnote]
+command = "node"
+args = ["/absolute/path/to/upnote-mcp/server.mjs"]
+startup_timeout_sec = 10
+tool_timeout_sec = 60
+```
+
+The normal user configuration is `~/.codex/config.toml`. A project-scoped `.codex/config.toml` is also supported for a trusted project. Do not put a library path or other private value in a repository that others can read. This project does not edit either configuration file or register itself automatically.
+
+On Windows, quote the absolute path in the command and use a path that your `node` installation can read, for example:
+
+```powershell
+codex mcp add upnote -- node "C:\Users\you\src\upnote-mcp\server.mjs"
+```
+
+If Codex cannot find the same Node installation as your shell, use the absolute path to `node.exe`. In TOML, use forward slashes or escape each backslash:
+
+```toml
+args = ["C:/Users/you/src/upnote-mcp/server.mjs"]
+```
+
+Check the registration with `codex mcp list` or `codex mcp get upnote`. In a running Codex TUI, use `/mcp` to inspect the active connection. The server returns its instructions during MCP initialization, and Codex uses those instructions alongside the tools.
+
+The optional `enabled_tools` and `disabled_tools` settings can filter the tools Codex exposes. `disabled_tools` is applied after `enabled_tools`:
+
+```toml
+[mcp_servers.upnote]
+command = "node"
+args = ["/absolute/path/to/upnote-mcp/server.mjs"]
+enabled_tools = ["upnote_list_notebooks", "upnote_list_notes", "upnote_search_notes", "upnote_get_note", "upnote_recent_notes", "upnote_list_tags"]
+```
+
+## What it can do
+
+| Tool | Function |
+| --- | --- |
+| `upnote_create_note` | Dispatch creation of a Markdown note. |
+| `upnote_create_notebook` | Dispatch creation of a notebook. |
+| `upnote_list_notebooks` | List non-trashed notebooks and note counts. |
+| `upnote_list_notes` | List non-trashed notes in a notebook. |
+| `upnote_search_notes` | Search non-trashed note titles and bodies. |
+| `upnote_get_note` | Read one non-trashed note by ID. |
+| `upnote_recent_notes` | List recently updated non-trashed notes. |
+| `upnote_list_tags` | List non-trashed tags. |
+| `upnote_open_note` | Dispatch a request to open a note in UpNote. |
+| `upnote_open_notebook` | Dispatch a request to open a notebook in UpNote. |
+
+The six list/search/read tools are read-only. Creation is create-only: existing notes cannot be edited, appended to, or deleted. App-opening tools have a local side effect. Successful URL launches are reported as **request dispatched**; the server cannot confirm that UpNote processed the URL or created the requested record.
+
+New notes go to `Codex Notes` when `notebook` is omitted. To retain the previous default, set `UPNOTE_DEFAULT_NOTEBOOK=Claude Notes` in the server environment.
+
+## Environment settings
+
+Set these in the `env` table of the server configuration or in the environment that launches Codex:
+
+```toml
+[mcp_servers.upnote.env]
+UPNOTE_DEFAULT_NOTEBOOK = "Codex Notes"
+UPNOTE_DB = "/absolute/path/to/upnote.sqlite3"
+UPNOTE_SNAPSHOT_DIR = "/absolute/path/to/private/snapshot-parent"
+UPNOTE_URL_LIMIT = "100000"
+```
+
+| Setting | Default | Function |
+| --- | --- | --- |
+| `UPNOTE_DEFAULT_NOTEBOOK` | `Codex Notes` | Notebook name sent for notes without an explicit notebook. |
+| `UPNOTE_DB` | Platform detection | Full path to `upnote.sqlite3`. Required on Linux and other unsupported platforms. |
+| `UPNOTE_SNAPSHOT_DIR` | System temporary directory | Private parent directory for a unique per-process snapshot directory. |
+| `UPNOTE_URL_LIMIT` | `100000` | Maximum encoded URL length for every create/open operation. Must be a positive integer. |
+
+Database detection is limited to the current platform. Windows checks the Microsoft Store and installer locations; macOS checks the documented application container path. Linux does not guess an undocumented storage location and requires `UPNOTE_DB`.
+
+The server copies `upnote.sqlite3`, `upnote.sqlite3-wal`, and `upnote.sqlite3-shm` into a unique process-owned directory, opens the completed copy, validates it, and never writes to UpNote's source files. It compares metadata for each source file and retries an unstable copy up to three times. Normal disconnect or termination removes only that process-owned directory. Abrupt termination can leave temporary files.
+
+File-copy snapshots cannot guarantee transactional consistency while UpNote is writing concurrently. The snapshot code detects source changes during copying, but a stable set of file metadata is not a SQLite transaction boundary. For the most consistent view, pause UpNote writes while a snapshot is being refreshed.
+
+The URL launcher passes the URL as an argument without a shell: `rundll32` on Windows, `open` on macOS, and `xdg-open` on Linux and other Unix-like platforms. Note text is present in the URL process command line during creation, so other local processes may be able to observe it.
+
+## Platform and validation notes
+
+The automated test suite exercises the Windows, macOS, and Linux detection and launcher branches with mocks, along with WAL-backed fixtures, snapshot refresh, copy retries, isolation, cleanup, input/output schemas, and MCP stdio behavior. Real UpNote integration has been validated on Windows with the Microsoft Store build; macOS and Linux paths remain automated coverage rather than a claim of real UpNote validation.
+
+## Tests
+
+The normal test command is isolated and does not access or modify a real UpNote library:
+
+```bash
+npm ci
+npm test
+```
+
+Syntax checks can be run with:
+
+```bash
+node --check server.mjs
+node --check config.mjs
+node --check database.mjs
+node --check launcher.mjs
+node --check tools.mjs
+```
+
+The manual MCP smoke client is kept under explicit commands. `read` is side-effect free; `write` creates real notes and notebooks that UpNote will require you to remove manually:
+
+```bash
+node test-client.mjs read
+node test-client.mjs write
+```
+
+Use `TEST_NOTEBOOK` and `TEST_QUERY` to select the manual smoke inputs. The automated tests use synthetic SQLite fixtures and mocked launchers, so they never create real notes or expose a user's library.
 
 ## License
 
-MIT.
+MIT. See [LICENSE](LICENSE).
