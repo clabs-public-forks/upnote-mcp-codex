@@ -19,3 +19,5 @@ learnings-archive.md
 .env
 .DS_Store
 Thumbs.db
+.codex/
+
