@@ -69,11 +69,12 @@ function serviceFor(fixture, config = testConfig(), launches = []) {
 
 function textOf(response) { return response.content.map(block => block.text).join("\n"); }
 
-test("tool definitions expose all ten tools, schemas, titles, and accurate annotations", () => {
-  assert.equal(TOOL_DEFINITIONS.length, 10);
+test("tool definitions expose all thirteen tools, schemas, titles, and accurate annotations", () => {
+  assert.equal(TOOL_DEFINITIONS.length, 13);
   assert.deepEqual(TOOL_DEFINITIONS.map(tool => tool.name), [
     "upnote_create_note", "upnote_create_notebook", "upnote_list_notebooks", "upnote_list_notes",
     "upnote_search_notes", "upnote_get_note", "upnote_recent_notes", "upnote_list_tags", "upnote_open_note", "upnote_open_notebook",
+    "upnote_open_tag", "upnote_open_filter", "upnote_view",
   ]);
   for (const tool of TOOL_DEFINITIONS) {
     assert.ok(tool.title);
@@ -82,6 +83,11 @@ test("tool definitions expose all ten tools, schemas, titles, and accurate annot
   }
   assert.equal(TOOL_DEFINITIONS.filter(tool => tool.annotations.readOnlyHint).length, 6);
   assert.equal(TOOL_DEFINITIONS.find(tool => tool.name === "upnote_create_note").annotations.readOnlyHint, false);
+  assert.equal(TOOL_DEFINITIONS.find(tool => tool.name === "upnote_open_note").annotations.idempotentHint, false);
+  assert.deepEqual(TOOL_DEFINITIONS.find(tool => tool.name === "upnote_view").inputSchema.properties.mode.enum, [
+    "all_notes", "quick_access", "templates", "trash", "notebooks", "tags", "filters", "all_notebooks", "all_tags",
+  ]);
+  assert.equal(TOOL_DEFINITIONS.find(tool => tool.name === "upnote_create_note").inputSchema.properties.markdown.default, true);
 });
 
 test("synthetic WAL fixture supports reads, trash filtering, ambiguity, empty search, and truncation", async t => {
@@ -167,6 +173,113 @@ test("URL encoding, dispatch wording, URL limits, and launcher failures are obse
   assert.match(textOf(failed), /launcher unavailable/);
 });
 
+test("documented URL endpoints encode parameters, preserve booleans, and dispatch without database access", async () => {
+  const launches = [];
+  const service = createToolService({
+    database: { all: () => { throw new Error("database should not be used"); }, get: () => { throw new Error("database should not be used"); } },
+    launcher: { open: async url => launches.push(url) },
+    config: testConfig(),
+  });
+  const call = async (name, args) => {
+    const response = await service.call(name, args);
+    assert.equal(response.isError, undefined, textOf(response));
+    assert.equal(response.structuredContent.dispatched, true);
+    assert.equal(response.structuredContent.confirmed, false);
+    return response;
+  };
+
+  const defaultMarkdown = await call("upnote_create_note", { title: "A & B", content: "# body", notebook: "Notes" });
+  let parsed = new URL(launches.at(-1));
+  assert.equal(parsed.pathname, "/note/new");
+  assert.equal(parsed.searchParams.get("markdown"), "true");
+  assert.equal(parsed.searchParams.get("new_window"), null);
+  assert.equal(defaultMarkdown.structuredContent.markdown, true);
+
+  await call("upnote_create_note", { title: "Plain", content: "body", markdown: false, new_window: false });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.searchParams.get("markdown"), "false");
+  assert.equal(parsed.searchParams.get("new_window"), "false");
+  await call("upnote_create_note", { title: "Window", content: "body", new_window: true });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.searchParams.get("markdown"), "true");
+  assert.equal(parsed.searchParams.get("new_window"), "true");
+
+  await call("upnote_open_note", { id: "note & one" });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.pathname, "/openNote");
+  assert.equal(parsed.searchParams.get("noteId"), "note & one");
+  assert.equal(parsed.searchParams.get("new_window"), null);
+  await call("upnote_open_note", { id: "note-2", new_window: false });
+  assert.equal(new URL(launches.at(-1)).searchParams.get("new_window"), "false");
+  await call("upnote_open_note", { id: "note-3", new_window: true });
+  assert.equal(new URL(launches.at(-1)).searchParams.get("new_window"), "true");
+
+  await call("upnote_open_tag", { tag: "bread & butter" });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.pathname, "/tag/view");
+  assert.equal(parsed.searchParams.get("tag"), "bread & butter");
+  await call("upnote_open_filter", { filter_id: "filter/#1" });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.pathname, "/openFilter");
+  assert.equal(parsed.searchParams.get("filterId"), "filter/#1");
+
+  const modeCases = [
+    ["all_notes", {}], ["quick_access", {}], ["templates", {}], ["trash", {}],
+    ["all_notebooks", {}], ["all_tags", {}], ["notebooks", { notebook_id: "nb & one" }],
+    ["tags", { tag_id: "tag/one" }], ["filters", { filter_id: "filter one" }],
+  ];
+  for (const [mode, extra] of modeCases) {
+    await call("upnote_view", { mode, ...extra });
+    parsed = new URL(launches.at(-1));
+    assert.equal(parsed.pathname, "/view");
+    assert.equal(parsed.searchParams.get("mode"), mode);
+    for (const [key, value] of Object.entries(extra)) assert.equal(parsed.searchParams.get(key.replaceAll("_", "").replace("notebookid", "notebookId").replace("tagid", "tagId").replace("filterid", "filterId")), value);
+  }
+  await call("upnote_view", { note_id: "note/one" });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.searchParams.get("noteId"), "note/one");
+  assert.equal(parsed.searchParams.get("mode"), null);
+  await call("upnote_view", { action: "search", query: "A & B" });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.searchParams.get("action"), "search");
+  assert.equal(parsed.searchParams.get("query"), "A & B");
+  await call("upnote_view", { space_id: "default" });
+  assert.equal(new URL(launches.at(-1)).searchParams.get("spaceId"), "default");
+});
+
+test("URL navigation rejects invalid combinations before launching and enforces URL limits", async () => {
+  const launches = [];
+  const service = createToolService({
+    database: { all: () => { throw new Error("database should not be used"); }, get: () => { throw new Error("database should not be used"); } },
+    launcher: { open: async url => launches.push(url) },
+    config: testConfig({ urlLimit: 80 }),
+  });
+  for (const [name, args, message] of [
+    ["upnote_view", {}, /Provide/],
+    ["upnote_view", { mode: "unknown" }, /must be one of/],
+    ["upnote_view", { mode: "notebooks" }, /notebook_id.*required/],
+    ["upnote_view", { mode: "tags", tag_id: "" }, /tag_id.*required/],
+    ["upnote_view", { mode: "filters", filter_id: "f", mode_extra: true }, /Unknown argument/],
+    ["upnote_view", { notebook_id: "n" }, /requires mode/],
+    ["upnote_view", { query: "q" }, /requires action/],
+    ["upnote_view", { action: "search" }, /query.*required/],
+    ["upnote_view", { action: "search", query: "q", note_id: "n" }, /cannot be combined/],
+    ["upnote_open_tag", { tag: "" }, /must not be empty/],
+    ["upnote_open_filter", { filter_id: "" }, /must not be empty/],
+    ["upnote_open_note", { id: "n", new_window: "true" }, /must be a boolean/],
+    ["upnote_create_note", { title: "t", content: "c", markdown: "true" }, /must be a boolean/],
+  ]) {
+    const response = await service.call(name, args);
+    assert.equal(response.isError, true, textOf(response));
+    assert.match(textOf(response), message);
+  }
+  assert.equal(launches.length, 0);
+  const tooLong = await service.call("upnote_view", { action: "search", query: "x".repeat(100) });
+  assert.equal(tooLong.isError, true);
+  assert.match(textOf(tooLong), /configured limit/);
+  assert.equal(launches.length, 0);
+});
+
 test("snapshot refresh retries unstable copies, isolates processes, and cleans up", async t => {
   const fixture = makeFixture();
   t.after(() => fixture.live.close());
@@ -215,16 +328,19 @@ test("database discovery failures preserve URL tools and can be retried", async 
     t.after(() => database.close());
     const launches = [];
     const service = createToolService({ database, config, launcher: { open: async url => launches.push(url) } });
-    assert.equal(service.definitions.length, 10);
+    assert.equal(service.definitions.length, 13);
     for (const [name, args] of [
       ["upnote_create_note", { title: "Test", content: "Test content" }],
       ["upnote_create_notebook", { title: "Test" }],
       ["upnote_open_note", { id: "n1" }],
+      ["upnote_open_tag", { tag: "bread" }],
+      ["upnote_open_filter", { filter_id: "filter-1" }],
+      ["upnote_view", { mode: "all_notes" }],
     ]) {
       const response = await service.call(name, args);
       assert.equal(response.isError, undefined, textOf(response));
     }
-    assert.equal(launches.length, 3);
+    assert.equal(launches.length, 6);
     const failed = await service.call("upnote_list_notebooks");
     assert.equal(failed.isError, true);
     assert.match(textOf(failed), /UPNOTE_DB/);
@@ -328,7 +444,12 @@ test("MCP SDK client discovers schemas, instructions, results, errors, and shuts
   assert.equal(client.getServerVersion().name, "upnote-mcp-codex");
   assert.match(client.getInstructions(), /local data/);
   const listed = await client.listTools();
-  assert.equal(listed.tools.length, 10);
+  assert.equal(listed.tools.length, 13);
+  assert.equal(listed.tools.find(tool => tool.name === "upnote_open_note").inputSchema.properties.new_window.type, "boolean");
+  assert.equal(listed.tools.find(tool => tool.name === "upnote_open_filter").inputSchema.properties.filter_id.type, "string");
+  assert.deepEqual(listed.tools.find(tool => tool.name === "upnote_view").inputSchema.properties.mode.enum, [
+    "all_notes", "quick_access", "templates", "trash", "notebooks", "tags", "filters", "all_notebooks", "all_tags",
+  ]);
   assert.equal(listed.tools.find(tool => tool.name === "upnote_get_note").outputSchema.properties.truncated.type, "boolean");
   const empty = await client.callTool({ name: "upnote_search_notes", arguments: { query: "" } });
   assert.equal(empty.isError, undefined);

@@ -43,24 +43,26 @@ const noteListOutput = {
 
 const limit = { type: "integer", minimum: 1, maximum: 200 };
 const string = { type: "string" };
+const boolean = { type: "boolean" };
 const noArgs = { type: "object", properties: {}, additionalProperties: false };
+const viewModes = ["all_notes", "quick_access", "templates", "trash", "notebooks", "tags", "filters", "all_notebooks", "all_tags"];
 
 export const TOOL_DEFINITIONS = [
   {
     name: "upnote_create_note",
     title: "Create UpNote note",
-    description: "Request creation of a new Markdown note. If notebook is omitted, the configured default (Codex Notes by default) is used. UpNote handles the write through its URL scheme; existing notes cannot be edited.",
+    description: "Request creation of a new note through UpNote's URL scheme. If notebook is omitted, the configured default (Codex Notes by default) is used. Markdown formatting defaults to true for compatibility; new_window is omitted unless specified. Existing notes cannot be edited.",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       type: "object", additionalProperties: false,
-      properties: { title: string, content: string, notebook: string },
+      properties: { title: string, content: string, notebook: string, new_window: boolean, markdown: { ...boolean, default: true } },
       required: ["title", "content"],
     },
     outputSchema: {
       type: "object", additionalProperties: false,
       properties: {
         dispatched: { type: "boolean" }, confirmed: { type: "boolean" },
-        operation: { type: "string" }, title: string, notebook: string, urlLength: { type: "integer" },
+        operation: { type: "string" }, title: string, notebook: string, markdown: boolean, new_window: boolean, urlLength: { type: "integer" },
         ...errorProperties,
       },
       required: ["dispatched", "confirmed", "operation"],
@@ -135,10 +137,10 @@ export const TOOL_DEFINITIONS = [
   {
     name: "upnote_open_note",
     title: "Open an UpNote note",
-    description: "Dispatch a request to open a note in UpNote. The app does not confirm the request to this server.",
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-    inputSchema: { type: "object", additionalProperties: false, properties: { id: string }, required: ["id"] },
-    outputSchema: dispatchOutput("open_note"),
+    description: "Dispatch a request to open a note in UpNote. Set new_window to request an additional window; it is omitted unless specified. The app does not confirm the request to this server.",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    inputSchema: { type: "object", additionalProperties: false, properties: { id: string, new_window: boolean }, required: ["id"] },
+    outputSchema: dispatchOutput("open_note", { id: string, new_window: boolean }),
   },
   {
     name: "upnote_open_notebook",
@@ -148,12 +150,45 @@ export const TOOL_DEFINITIONS = [
     inputSchema: { type: "object", additionalProperties: false, properties: { notebook: string }, required: ["notebook"] },
     outputSchema: dispatchOutput("open_notebook"),
   },
+  {
+    name: "upnote_open_tag",
+    title: "Open an UpNote tag",
+    description: "Dispatch a request to view notes in UpNote by tag title. The tag title is sent directly and does not require local database access.",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    inputSchema: { type: "object", additionalProperties: false, properties: { tag: string }, required: ["tag"] },
+    outputSchema: dispatchOutput("open_tag", { tag: string }),
+  },
+  {
+    name: "upnote_open_filter",
+    title: "Open an UpNote filter",
+    description: "Dispatch a request to view an UpNote filter by its explicit filter ID. The ID is sent directly and does not require local database access.",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    inputSchema: { type: "object", additionalProperties: false, properties: { filter_id: string }, required: ["filter_id"] },
+    outputSchema: dispatchOutput("open_filter", { filter_id: string }),
+  },
+  {
+    name: "upnote_view",
+    title: "Navigate UpNote dynamically",
+    description: "Dispatch UpNote's dynamic view endpoint. Use a documented mode, note_id to open a note, action=search with query to search, or space_id (including default) to select a space. Notebook, tag, and filter modes require their corresponding explicit IDs and do not use local database discovery.",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    inputSchema: {
+      type: "object", additionalProperties: false,
+      properties: {
+        mode: { type: "string", enum: viewModes }, note_id: string, notebook_id: string, tag_id: string,
+        filter_id: string, space_id: string, action: { type: "string", enum: ["search"] }, query: string,
+      },
+    },
+    outputSchema: dispatchOutput("view", {
+      mode: string, note_id: string, notebook_id: string, tag_id: string, filter_id: string,
+      space_id: string, action: string, query: string,
+    }),
+  },
 ];
 
-function dispatchOutput(operation) {
+function dispatchOutput(operation, extraProperties = {}) {
   return {
     type: "object", additionalProperties: false,
-    properties: { dispatched: { type: "boolean" }, confirmed: { type: "boolean" }, operation: { const: operation }, id: string, notebook: string, title: string, urlLength: { type: "integer" }, ...errorProperties },
+    properties: { dispatched: { type: "boolean" }, confirmed: { type: "boolean" }, operation: { const: operation }, id: string, notebook: string, title: string, urlLength: { type: "integer" }, ...extraProperties, ...errorProperties },
     required: ["dispatched", "confirmed", "operation"],
   };
 }
@@ -179,7 +214,7 @@ function validateArguments(name, args) {
   const input = args ?? {};
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Tool arguments must be an object.");
   const allowed = {
-    upnote_create_note: ["title", "content", "notebook"],
+    upnote_create_note: ["title", "content", "notebook", "new_window", "markdown"],
     upnote_create_notebook: ["title"],
     upnote_list_notebooks: [],
     upnote_list_notes: ["notebook", "limit"],
@@ -187,25 +222,72 @@ function validateArguments(name, args) {
     upnote_get_note: ["id", "max_chars"],
     upnote_recent_notes: ["limit"],
     upnote_list_tags: [],
-    upnote_open_note: ["id"],
+    upnote_open_note: ["id", "new_window"],
     upnote_open_notebook: ["notebook"],
+    upnote_open_tag: ["tag"],
+    upnote_open_filter: ["filter_id"],
+    upnote_view: ["mode", "note_id", "notebook_id", "tag_id", "filter_id", "space_id", "action", "query"],
   }[name];
   for (const key of Object.keys(input)) if (!allowed.includes(key)) throw new Error(`Unknown argument "${key}".`);
 
   const required = {
     upnote_create_note: ["title", "content"], upnote_create_notebook: ["title"], upnote_list_notes: ["notebook"],
     upnote_search_notes: ["query"], upnote_get_note: ["id"], upnote_open_note: ["id"], upnote_open_notebook: ["notebook"],
+    upnote_open_tag: ["tag"], upnote_open_filter: ["filter_id"],
   }[name] || [];
   for (const key of required) if (typeof input[key] !== "string") throw new Error(`"${key}" must be a string.`);
-  for (const key of ["notebook", "title", "content", "query", "id"]) {
+  for (const key of ["notebook", "title", "content", "query", "id", "tag", "filter_id", "mode", "note_id", "notebook_id", "tag_id", "space_id", "action"]) {
     if (input[key] !== undefined && typeof input[key] !== "string") throw new Error(`"${key}" must be a string.`);
+  }
+  for (const key of ["new_window", "markdown"]) {
+    if (input[key] !== undefined && typeof input[key] !== "boolean") throw new Error(`"${key}" must be a boolean.`);
   }
   for (const key of ["limit", "max_chars"]) {
     if (input[key] !== undefined && (!Number.isSafeInteger(input[key]) || input[key] < 1)) {
       throw new Error(`"${key}" must be a positive integer.`);
     }
   }
+  if (name === "upnote_open_tag" && input.tag.trim() === "") throw new Error('"tag" must not be empty.');
+  if (name === "upnote_open_filter" && input.filter_id.trim() === "") throw new Error('"filter_id" must not be empty.');
+  if (name === "upnote_view") validateViewArguments(input);
   return input;
+}
+
+function validateViewArguments(input) {
+  if (input.mode !== undefined && !viewModes.includes(input.mode)) {
+    throw new Error(`"mode" must be one of: ${viewModes.join(", ")}.`);
+  }
+  if (input.action !== undefined && input.action !== "search") {
+    throw new Error('"action" must be "search" when provided.');
+  }
+  if (input.action === "search" && input.query === undefined) {
+    throw new Error('"query" is required when action is "search".');
+  }
+  if (input.query !== undefined && input.action !== "search") {
+    throw new Error('"query" requires action "search".');
+  }
+  if (input.note_id !== undefined && input.action === "search") {
+    throw new Error('"note_id" cannot be combined with action "search".');
+  }
+  for (const key of ["space_id", "note_id"]) {
+    if (input[key] !== undefined && input[key].trim() === "") throw new Error(`"${key}" must not be empty.`);
+  }
+  const modeRequirements = {
+    notebooks: ["notebook_id"],
+    tags: ["tag_id"],
+    filters: ["filter_id"],
+  };
+  for (const [mode, [key]] of Object.entries(modeRequirements)) {
+    if (input.mode === mode && (!input[key] || input[key].trim() === "")) {
+      throw new Error(`"${key}" is required when mode is "${mode}".`);
+    }
+    if (input[key] !== undefined && input.mode !== mode) {
+      throw new Error(`"${key}" requires mode "${mode}".`);
+    }
+  }
+  if (input.mode === undefined && input.note_id === undefined && input.action === undefined && input.space_id === undefined) {
+    throw new Error('Provide "mode", "note_id", "action": "search", or "space_id" for dynamic navigation.');
+  }
 }
 
 async function execute(name, a, { database, launcher, config }) {
@@ -271,10 +353,11 @@ async function execute(name, a, { database, launcher, config }) {
     }
     case "upnote_create_note": {
       const notebook = a.notebook ?? config.defaultNotebook;
-      const url = callbackUrl("note/new", { title: a.title, text: a.content, notebook, markdown: "true" });
+      const markdown = a.markdown ?? true;
+      const url = callbackUrl("note/new", { title: a.title, text: a.content, notebook, new_window: a.new_window, markdown });
       ensureUrlLimit(url, config.urlLimit);
       await launcher.open(url);
-      return result(`UpNote request dispatched to create "${a.title}" in notebook "${notebook}". UpNote has not confirmed creation.`, { dispatched: true, confirmed: false, operation: "create_note", title: a.title, notebook, urlLength: url.length });
+      return result(`UpNote request dispatched to create "${a.title}" in notebook "${notebook}". UpNote has not confirmed creation.`, { dispatched: true, confirmed: false, operation: "create_note", title: a.title, notebook, markdown, ...(a.new_window === undefined ? {} : { new_window: a.new_window }), urlLength: url.length });
     }
     case "upnote_create_notebook": {
       const url = callbackUrl("notebook/new", { title: a.title });
@@ -283,10 +366,10 @@ async function execute(name, a, { database, launcher, config }) {
       return result(`UpNote request dispatched to create notebook "${a.title}". UpNote has not confirmed creation.`, { dispatched: true, confirmed: false, operation: "create_notebook", title: a.title, urlLength: url.length });
     }
     case "upnote_open_note": {
-      const url = callbackUrl("openNote", { noteId: a.id });
+      const url = callbackUrl("openNote", { noteId: a.id, new_window: a.new_window });
       ensureUrlLimit(url, config.urlLimit);
       await launcher.open(url);
-      return result(`UpNote request dispatched to open note ${a.id}. UpNote has not confirmed the request.`, { dispatched: true, confirmed: false, operation: "open_note", id: a.id, urlLength: url.length });
+      return result(`UpNote request dispatched to open note ${a.id}. UpNote has not confirmed the request.`, { dispatched: true, confirmed: false, operation: "open_note", id: a.id, ...(a.new_window === undefined ? {} : { new_window: a.new_window }), urlLength: url.length });
     }
     case "upnote_open_notebook": {
       const match = resolveNotebook(database, a.notebook);
@@ -295,6 +378,29 @@ async function execute(name, a, { database, launcher, config }) {
       ensureUrlLimit(url, config.urlLimit);
       await launcher.open(url);
       return result(`UpNote request dispatched to open notebook "${match.notebook.title}". UpNote has not confirmed the request.`, { dispatched: true, confirmed: false, operation: "open_notebook", id: match.notebook.id, notebook: match.notebook.title, urlLength: url.length });
+    }
+    case "upnote_open_tag": {
+      const url = callbackUrl("tag/view", { tag: a.tag });
+      ensureUrlLimit(url, config.urlLimit);
+      await launcher.open(url);
+      return result(`UpNote request dispatched to open tag "${a.tag}". UpNote has not confirmed the request.`, { dispatched: true, confirmed: false, operation: "open_tag", tag: a.tag, urlLength: url.length });
+    }
+    case "upnote_open_filter": {
+      const url = callbackUrl("openFilter", { filterId: a.filter_id });
+      ensureUrlLimit(url, config.urlLimit);
+      await launcher.open(url);
+      return result(`UpNote request dispatched to open filter ${a.filter_id}. UpNote has not confirmed the request.`, { dispatched: true, confirmed: false, operation: "open_filter", filter_id: a.filter_id, urlLength: url.length });
+    }
+    case "upnote_view": {
+      const params = {
+        mode: a.mode, noteId: a.note_id, notebookId: a.notebook_id, tagId: a.tag_id,
+        filterId: a.filter_id, spaceId: a.space_id, action: a.action, query: a.query,
+      };
+      const url = callbackUrl("view", params);
+      ensureUrlLimit(url, config.urlLimit);
+      await launcher.open(url);
+      const requested = Object.fromEntries(Object.entries(a).filter(([, value]) => value !== undefined));
+      return result("UpNote navigation request dispatched. UpNote has not confirmed the request.", { dispatched: true, confirmed: false, operation: "view", ...requested, urlLength: url.length });
     }
     default:
       throw new Error(`Unknown tool: ${name}`);

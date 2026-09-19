@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Unofficial UpNote MCP server for Codex CLI.
 // Reads local synced data from a process-owned SQLite snapshot and dispatches
-// create/open requests through UpNote's upnote:// URL scheme.
+// create/open/navigation requests through UpNote's upnote:// URL scheme.
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -17,7 +17,9 @@ const service = createToolService({ database, launcher: createLauncher(), config
 const instructions = [
   "UpNote MCP reads the local data that UpNote has synced to this computer.",
   "Write capabilities are create-only: this server cannot edit or delete existing notes.",
-  "Create and open tools dispatch an upnote:// URL to the local app; a dispatched request is not confirmation that UpNote created or opened anything.",
+  "Create, open, and navigation tools dispatch documented upnote:// URLs to the local app; a dispatched request is not confirmation that UpNote processed it.",
+  "upnote_open_tag, upnote_open_filter, and upnote_view accept explicit titles or IDs and do not discover tags, filters, spaces, or IDs through the local database.",
+  "URL endpoint details and supported view modes follow https://help.getupnote.com/resources/x-callback-url-endpoints.",
 ].join(" ");
 
 const server = new Server(

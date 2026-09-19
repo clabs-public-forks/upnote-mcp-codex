@@ -1,8 +1,10 @@
 # upnote-mcp-codex
 
-An unofficial, Codex CLI focused [Model Context Protocol](https://modelcontextprotocol.io/) server for local [UpNote](https://getupnote.com/) data. It reads the notes that UpNote has synced to this computer and dispatches create or open requests through UpNote's `upnote://` URL scheme. It does not use an account, cloud API, HTTP service, authentication layer, or plugin packaging.
+An unofficial, Codex CLI focused [Model Context Protocol](https://modelcontextprotocol.io/) server for local [UpNote](https://getupnote.com/) data. It reads the notes that UpNote has synced to this computer and dispatches create, open, and navigation requests through UpNote's `upnote://` URL scheme. It does not use an account, cloud API, HTTP service, authentication layer, or plugin packaging.
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by UpNote or Thomas Dao. It reads an undocumented local database that may change in a future UpNote release. Back up your notes.
+
+URL support follows UpNote's [official x-callback-url endpoint reference](https://help.getupnote.com/resources/x-callback-url-endpoints). The server covers all seven documented endpoints: create a note, open a note, open a notebook, create a notebook, open a tag, open a filter, and dynamic view.
 
 ## Setup with Codex CLI
 
@@ -59,7 +61,7 @@ enabled_tools = ["upnote_list_notebooks", "upnote_list_notes", "upnote_search_no
 
 | Tool | Function |
 | --- | --- |
-| `upnote_create_note` | Dispatch creation of a Markdown note. |
+| `upnote_create_note` | Dispatch creation of a note, with Markdown formatting enabled by default. |
 | `upnote_create_notebook` | Dispatch creation of a notebook. |
 | `upnote_list_notebooks` | List non-trashed notebooks and note counts. |
 | `upnote_list_notes` | List non-trashed notes in a notebook. |
@@ -69,10 +71,29 @@ enabled_tools = ["upnote_list_notebooks", "upnote_list_notes", "upnote_search_no
 | `upnote_list_tags` | List non-trashed tags. |
 | `upnote_open_note` | Dispatch a request to open a note in UpNote. |
 | `upnote_open_notebook` | Dispatch a request to open a notebook in UpNote. |
+| `upnote_open_tag` | Dispatch a request to view notes for a tag title. |
+| `upnote_open_filter` | Dispatch a request to open a filter by explicit filter ID. |
+| `upnote_view` | Dispatch dynamic navigation, note opening, search, and space selection. |
 
-The six list/search/read tools are read-only. Creation is create-only: existing notes cannot be edited, appended to, or deleted. App-opening tools have a local side effect. Successful URL launches are reported as **request dispatched**; the server cannot confirm that UpNote processed the URL or created the requested record.
+The six list/search/read tools are read-only. Creation is create-only: existing notes cannot be edited, appended to, or deleted. App-opening and navigation tools have a local side effect. Successful URL launches are reported as **request dispatched**; the server cannot confirm that UpNote processed the URL or created the requested record.
 
-New notes go to `Codex Notes` when `notebook` is omitted. To retain the previous default, set `UPNOTE_DEFAULT_NOTEBOOK=Claude Notes` in the server environment.
+New notes go to `Codex Notes` when `notebook` is omitted. `markdown` defaults to `true`; pass `false` for plain note text. `new_window` is optional on note creation and note opening and is omitted from the URL when unspecified. To retain the previous default notebook, set `UPNOTE_DEFAULT_NOTEBOOK=Claude Notes` in the server environment.
+
+## URL endpoint coverage
+
+| UpNote endpoint | Tool | Parameters |
+| --- | --- | --- |
+| `note/new` | `upnote_create_note` | `title`, `text` from `content`, `notebook`, optional `new_window`, optional `markdown` (defaults to `true`) |
+| `openNote` | `upnote_open_note` | `noteId` from `id`, optional `new_window` |
+| `openNotebook` | `upnote_open_notebook` | `notebookId` resolved from `notebook` by existing local database behavior |
+| `notebook/new` | `upnote_create_notebook` | `title` |
+| `tag/view` | `upnote_open_tag` | `tag` title |
+| `openFilter` | `upnote_open_filter` | `filterId` from explicit `filter_id` |
+| `view` | `upnote_view` | `mode`, `noteId`, `notebookId`, `tagId`, `filterId`, `spaceId`, `action`, `query` |
+
+`upnote_view` supports `all_notes`, `quick_access`, `templates`, `trash`, `notebooks`, `tags`, `filters`, `all_notebooks`, and `all_tags`. Notebook, tag, and filter modes require `notebook_id`, `tag_id`, and `filter_id` respectively. `note_id` opens a note without a mode; `action: "search"` with `query` searches without a mode; and `space_id: "default"` selects the default space. Navigation returns dispatch status rather than note results.
+
+Explicit IDs can be copied from the `id` fields returned by `upnote_list_notebooks`, `upnote_list_tags`, note list/read results, or another trusted UpNote integration. The URL-only tools accept those values directly and do not query undocumented database tables to discover filters or spaces. `upnote_open_notebook` retains its existing title-or-ID resolution behavior for compatibility.
 
 ## Environment settings
 
@@ -91,7 +112,7 @@ UPNOTE_URL_LIMIT = "100000"
 | `UPNOTE_DEFAULT_NOTEBOOK` | `Codex Notes` | Notebook name sent for notes without an explicit notebook. |
 | `UPNOTE_DB` | Platform detection | Full path to `upnote.sqlite3`. Required on Linux and other unsupported platforms. |
 | `UPNOTE_SNAPSHOT_DIR` | System temporary directory | Private parent directory for a unique per-process snapshot directory. |
-| `UPNOTE_URL_LIMIT` | `100000` | Maximum encoded URL length for every create/open operation. Must be a positive integer. |
+| `UPNOTE_URL_LIMIT` | `100000` | Maximum encoded URL length for every URL dispatch, including navigation. Must be a positive integer. |
 
 Database detection is limited to the current platform. Windows checks the Microsoft Store and installer locations; macOS checks the documented application container path. Linux does not guess an undocumented storage location and requires `UPNOTE_DB`.
 
@@ -103,7 +124,7 @@ The URL launcher passes the URL as an argument without a shell: `rundll32` on Wi
 
 ## Platform and validation notes
 
-The automated test suite exercises the Windows, macOS, and Linux detection and launcher branches with mocks, along with WAL-backed fixtures, snapshot refresh, copy retries, isolation, cleanup, input/output schemas, and MCP stdio behavior. Real UpNote integration has been validated on Windows with the Microsoft Store build; macOS and Linux paths remain automated coverage rather than a claim of real UpNote validation.
+The automated test suite exercises the Windows, macOS, and Linux detection and launcher branches with mocks, along with WAL-backed fixtures, snapshot refresh, copy retries, isolation, cleanup, input/output schemas, URL endpoint coverage, and MCP stdio behavior. Automated tests do not claim that a local UpNote build processed a URL. Use the opt-in navigation smoke mode below for platform verification and record those observations separately.
 
 ## Tests
 
@@ -124,14 +145,15 @@ node --check launcher.mjs
 node --check tools.mjs
 ```
 
-The manual MCP smoke client is kept under explicit commands. `read` is side-effect free; `write` creates real notes and notebooks that UpNote will require you to remove manually:
+The manual MCP smoke client is kept under explicit commands. `read` is side-effect free; `write` creates real notes and notebooks that UpNote will require you to remove manually. `navigation` is also opt-in: it launches view, search, space, tag, filter, note, window, and note-formatting checks, and its formatting checks create two real notes for manual cleanup. It requires the environment values described in the script comments and can change the visible UpNote window:
 
 ```bash
 node test-client.mjs read
 node test-client.mjs write
+TEST_NOTE_ID="..." TEST_NOTEBOOK_ID="..." TEST_TAG_ID="..." TEST_FILTER_ID="..." node test-client.mjs navigation
 ```
 
-Use `TEST_NOTEBOOK` and `TEST_QUERY` to select the manual smoke inputs. The automated tests use synthetic SQLite fixtures and mocked launchers, so they never create real notes or expose a user's library.
+Use `TEST_NOTEBOOK`, `TEST_QUERY`, `TEST_NOTE_ID`, `TEST_NOTEBOOK_ID`, `TEST_TAG`, `TEST_TAG_ID`, `TEST_FILTER_ID`, and `TEST_SPACE_ID` to select the manual smoke inputs. The navigation mode always checks `space_id: "default"`; set `TEST_SPACE_ID` to check another explicit space. It uses `new_window` and both markdown boolean values only when the relevant checks are enabled. The automated tests use synthetic SQLite fixtures and mocked launchers, so they never create real notes or expose a user's library.
 
 ## License
 
