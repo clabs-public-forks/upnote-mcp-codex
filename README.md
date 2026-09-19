@@ -57,6 +57,57 @@ args = ["/absolute/path/to/upnote-mcp/server.mjs"]
 enabled_tools = ["upnote_list_notebooks", "upnote_list_notes", "upnote_search_notes", "upnote_get_note", "upnote_recent_notes", "upnote_list_tags"]
 ```
 
+## Usage examples
+
+After registering the server, use it from Codex with ordinary requests such as:
+
+```text
+List my UpNote notebooks.
+```
+
+```text
+Search my UpNote notes for "release checklist" and show the five most relevant results.
+```
+
+```text
+Read the note with ID "<note-id>".
+```
+
+```text
+List the notes in the "Work" notebook, then open the most recently updated one.
+```
+
+```text
+Create an UpNote note titled "Meeting ideas" in the "Work" notebook with this content:
+
+- Follow up with the design team
+- Review the launch timeline
+```
+
+```text
+Open the UpNote tag "待处理".
+```
+
+Codex maps these requests to the available MCP tools. If you need to be explicit, the corresponding tool calls look like this:
+
+```json
+{"name":"upnote_search_notes","arguments":{"query":"release checklist","limit":5}}
+```
+
+```json
+{"name":"upnote_get_note","arguments":{"id":"<note-id>"}}
+```
+
+```json
+{"name":"upnote_create_note","arguments":{"title":"Meeting ideas","content":"- Follow up with the design team\n- Review the launch timeline","notebook":"Work"}}
+```
+
+```json
+{"name":"upnote_view","arguments":{"mode":"all_notes"}}
+```
+
+Use IDs returned by the list and search tools when opening a specific note, notebook, tag, or filter. The read/search tools are read-only. Creation and navigation dispatch requests to UpNote; they do not confirm that UpNote processed the request.
+
 ## What it can do
 
 | Tool | Function |
