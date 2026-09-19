@@ -5,6 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test, after } from "node:test";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { loadConfig, findDatabase } from "../config.mjs";
@@ -339,4 +342,66 @@ test("MCP SDK client discovers schemas, instructions, results, errors, and shuts
 
 after(() => {
   for (const root of tempRoots) fs.rmSync(root, { recursive: true, force: true });
+});
+
+
+test("MCP client receives actionable errors and resolves duplicate notebook titles by ID", async t => {
+  const fixture = makeFixture();
+  t.after(() => fixture.live.close());
+  fixture.live.exec("INSERT INTO notebooks VALUES ('nb-duplicate', ' ALPHA ', 0); INSERT INTO notebooks VALUES ('nb-collision', 'nb-alpha', 0);");
+  fixture.live.prepare("INSERT INTO lists VALUES (?, ?)").run("notebooks_nb-duplicate", JSON.stringify(["n3"]));
+  const { database, launches } = serviceFor(fixture);
+  t.after(() => database.close());
+  let databaseFails = false;
+  let launcherFails = false;
+  const service = createToolService({
+    config: testConfig(),
+    database: {
+      all: (...args) => { if (databaseFails) throw new Error("database unavailable"); return database.all(...args); },
+      get: (...args) => database.get(...args),
+    },
+    launcher: { open: async url => { if (launcherFails) throw new Error("launcher unavailable"); launches.push(url); } },
+  });
+  const server = new Server({ name: "test-server", version: "1" }, { capabilities: { tools: {} } });
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: service.definitions }));
+  server.setRequestHandler(CallToolRequestSchema, async request => service.call(request.params.name, request.params.arguments));
+  const client = new Client({ name: "test-client", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  t.after(async () => { await client.close(); await server.close(); });
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  await client.listTools();
+  const call = (name, args) => client.callTool({ name, arguments: args });
+  const checkError = async (name, args, message) => {
+    const response = await call(name, args);
+    assert.equal(response.isError, true);
+    assert.equal(response.structuredContent, undefined);
+    assert.match(textOf(response), message);
+    return response;
+  };
+  await checkError("upnote_get_note", { id: 42 }, /must be a string/);
+  databaseFails = true;
+  await checkError("upnote_list_notebooks", {}, /database unavailable/);
+  databaseFails = false;
+  launcherFails = true;
+  await checkError("upnote_open_note", { id: "n1" }, /launcher unavailable/);
+  launcherFails = false;
+  for (const name of ["upnote_list_notes", "upnote_search_notes", "upnote_open_notebook"]) {
+    const args = name === "upnote_search_notes" ? { query: "a" } : {};
+    const ambiguous = await checkError(name, { ...args, notebook: "alpha" }, /Pass a candidate ID/);
+    const ids = [...textOf(ambiguous).matchAll(/\[id: ([^\]]+)\]/g)].map(match => match[1]);
+    assert.deepEqual(new Set(ids), new Set(["nb-alpha", "nb-duplicate"]));
+    for (const id of ids) {
+      const response = await call(name, { ...args, notebook: id });
+      assert.equal(response.isError, undefined, textOf(response));
+      if (name === "upnote_open_notebook") {
+        assert.equal(response.structuredContent.id, id);
+        assert.equal(new URL(launches.at(-1)).searchParams.get("notebookId"), id);
+      } else {
+        assert.deepEqual(response.structuredContent.notes.map(note => note.id), [id === "nb-alpha" ? "n1" : "n3"]);
+      }
+    }
+    await checkError(name, { ...args, notebook: "missing" }, /No notebook matching/);
+    await checkError(name, { ...args, notebook: "nb-trash" }, /No notebook matching/);
+  }
 });

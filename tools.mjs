@@ -89,7 +89,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "upnote_list_notes",
     title: "List notes in UpNote notebook",
-    description: "List non-trashed notes in a notebook, newest first.",
+    description: "List non-trashed notes in a notebook by stable ID or title, newest first.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: { type: "object", additionalProperties: false, properties: { notebook: string, limit }, required: ["notebook"] },
     outputSchema: noteListOutput,
@@ -97,7 +97,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "upnote_search_notes",
     title: "Search UpNote notes",
-    description: "Search non-trashed note titles and bodies, optionally within one notebook.",
+    description: "Search non-trashed note titles and bodies, optionally within one notebook selected by stable ID or title.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: { type: "object", additionalProperties: false, properties: { query: string, notebook: string, limit }, required: ["query"] },
     outputSchema: noteListOutput,
@@ -143,7 +143,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "upnote_open_notebook",
     title: "Open an UpNote notebook",
-    description: "Dispatch a request to open a notebook in UpNote. The app does not confirm the request to this server.",
+    description: "Dispatch a request to open a notebook in UpNote by stable ID or title. The app does not confirm the request to this server.",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     inputSchema: { type: "object", additionalProperties: false, properties: { notebook: string }, required: ["notebook"] },
     outputSchema: dispatchOutput("open_notebook"),
@@ -314,6 +314,8 @@ function listNotebooks(database) {
 function resolveNotebook(database, requested) {
   const title = requested.trim().toLowerCase();
   const rows = listNotebooks(database);
+  const byId = rows.find(row => row.id === requested);
+  if (byId) return { kind: "matched", notebook: byId };
   const exact = rows.filter(row => row.title.trim().toLowerCase() === title);
   if (exact.length === 1) return { kind: "matched", notebook: exact[0] };
   if (exact.length > 1) return { kind: "ambiguous", candidates: exact };
@@ -326,7 +328,7 @@ function resolveNotebook(database, requested) {
 function notebookMatchResult(requested, match) {
   if (match.kind === "ambiguous") {
     const candidates = match.candidates;
-    return result(`Notebook "${requested}" is ambiguous. Candidates:\n${candidates.map(row => `- ${row.title} [id: ${row.id}]`).join("\n")}`, { status: "ambiguous", candidates, error: "Choose one of the candidate notebooks." }, true);
+    return result(`Notebook "${requested}" is ambiguous. Pass a candidate ID as notebook. Candidates:\n${candidates.map(row => `- ${row.title} [id: ${row.id}]`).join("\n")}`, { status: "ambiguous", candidates, error: "Choose one of the candidate notebooks." }, true);
   }
   return result(`No notebook matching "${requested}". Try upnote_list_notebooks.`, { status: "missing", candidates: [], error: `No notebook matching "${requested}".` }, true);
 }
@@ -380,5 +382,5 @@ function ensureUrlLimit(url, limit) {
 }
 
 function result(text, structuredContent, isError = false) {
-  return { content: [{ type: "text", text }], structuredContent, ...(isError ? { isError: true } : {}) };
+  return { content: [{ type: "text", text }], ...(isError ? { isError: true } : { structuredContent }) };
 }
