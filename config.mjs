@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 
 export const DEFAULTS = Object.freeze({
-  defaultNotebook: "Codex Notes",
   urlLimit: 100000,
   listLimit: 50,
   searchLimit: 20,
@@ -53,7 +52,6 @@ export function loadConfig({ env = process.env, platform = process.platform, hom
   const snapshotBaseDir = path.resolve(env.UPNOTE_SNAPSHOT_DIR || tempDir);
   return Object.freeze({
     ...DEFAULTS,
-    defaultNotebook: env.UPNOTE_DEFAULT_NOTEBOOK || DEFAULTS.defaultNotebook,
     urlLimit,
     get databasePath() { return findDatabase({ env, platform, homeDir }); },
     snapshotBaseDir,

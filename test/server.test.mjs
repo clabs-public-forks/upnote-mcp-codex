@@ -56,7 +56,7 @@ function makeFixture() {
 
 function testConfig(defaults = {}) {
   return {
-    defaultNotebook: "Codex Notes", urlLimit: 100000, listLimit: 50, searchLimit: 20, recentLimit: 20,
+    urlLimit: 100000, listLimit: 50, searchLimit: 20, recentLimit: 20,
     noteChars: 20000, maxResults: 200, maxNoteChars: 100000, ...defaults,
   };
 }
@@ -194,6 +194,11 @@ test("documented URL endpoints encode parameters, preserve booleans, and dispatc
   assert.equal(parsed.searchParams.get("markdown"), "true");
   assert.equal(parsed.searchParams.get("new_window"), null);
   assert.equal(defaultMarkdown.structuredContent.markdown, true);
+
+  await call("upnote_create_note", { title: "Dynamic default", content: "body" });
+  parsed = new URL(launches.at(-1));
+  assert.equal(parsed.pathname, "/note/new");
+  assert.equal(parsed.searchParams.get("notebook"), null);
 
   await call("upnote_create_note", { title: "Plain", content: "body", markdown: false, new_window: false });
   parsed = new URL(launches.at(-1));
@@ -398,9 +403,8 @@ test("platform detection and shell-free launcher branches are covered", async ()
   assert.equal(findDatabase({ env: { LOCALAPPDATA: path.join(root, "win") }, platform: "win32" }), winPath);
   assert.equal(findDatabase({ env: {}, platform: "darwin", homeDir: root }), macPath);
   assert.throws(() => findDatabase({ env: {}, platform: "linux" }), /UPNOTE_DB/);
-  const configured = loadConfig({ env: { UPNOTE_DB: winPath, UPNOTE_URL_LIMIT: "25", UPNOTE_DEFAULT_NOTEBOOK: "Personal" }, platform: "linux", tempDir: root });
+  const configured = loadConfig({ env: { UPNOTE_DB: winPath, UPNOTE_URL_LIMIT: "25" }, platform: "linux", tempDir: root });
   assert.equal(configured.urlLimit, 25);
-  assert.equal(configured.defaultNotebook, "Personal");
   assert.throws(() => loadConfig({ env: { UPNOTE_DB: winPath, UPNOTE_URL_LIMIT: "nope" }, platform: "linux", tempDir: root }), /positive integer/);
 
   assert.deepEqual(openerForPlatform("win32"), ["rundll32", ["url.dll,FileProtocolHandler"]]);

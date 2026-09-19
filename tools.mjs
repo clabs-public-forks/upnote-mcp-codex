@@ -51,7 +51,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "upnote_create_note",
     title: "Create UpNote note",
-    description: "Request creation of a new note through UpNote's URL scheme. If notebook is omitted, the configured default (Codex Notes by default) is used. Markdown formatting defaults to true for compatibility; new_window is omitted unless specified. Existing notes cannot be edited.",
+    description: "Request creation of a new note through UpNote's URL scheme. If notebook is omitted, UpNote chooses the user's current default notebook. Markdown formatting defaults to true for compatibility; new_window is omitted unless specified. Existing notes cannot be edited.",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       type: "object", additionalProperties: false,
@@ -352,12 +352,13 @@ async function execute(name, a, { database, launcher, config }) {
       return result(text, { found: true, note, totalChars: body.length, returnedChars: note.body.length, truncated });
     }
     case "upnote_create_note": {
-      const notebook = a.notebook ?? config.defaultNotebook;
+      const notebook = a.notebook;
       const markdown = a.markdown ?? true;
       const url = callbackUrl("note/new", { title: a.title, text: a.content, notebook, new_window: a.new_window, markdown });
       ensureUrlLimit(url, config.urlLimit);
       await launcher.open(url);
-      return result(`UpNote request dispatched to create "${a.title}" in notebook "${notebook}". UpNote has not confirmed creation.`, { dispatched: true, confirmed: false, operation: "create_note", title: a.title, notebook, markdown, ...(a.new_window === undefined ? {} : { new_window: a.new_window }), urlLength: url.length });
+      const destination = notebook === undefined ? "UpNote's default notebook" : `notebook "${notebook}"`;
+      return result(`UpNote request dispatched to create "${a.title}" in ${destination}. UpNote has not confirmed creation.`, { dispatched: true, confirmed: false, operation: "create_note", title: a.title, ...(notebook === undefined ? {} : { notebook }), markdown, ...(a.new_window === undefined ? {} : { new_window: a.new_window }), urlLength: url.length });
     }
     case "upnote_create_notebook": {
       const url = callbackUrl("notebook/new", { title: a.title });

@@ -77,7 +77,7 @@ enabled_tools = ["upnote_list_notebooks", "upnote_list_notes", "upnote_search_no
 
 The six list/search/read tools are read-only. Creation is create-only: existing notes cannot be edited, appended to, or deleted. App-opening and navigation tools have a local side effect. Successful URL launches are reported as **request dispatched**; the server cannot confirm that UpNote processed the URL or created the requested record.
 
-New notes go to `Codex Notes` when `notebook` is omitted. `markdown` defaults to `true`; pass `false` for plain note text. `new_window` is optional on note creation and note opening and is omitted from the URL when unspecified. To retain the previous default notebook, set `UPNOTE_DEFAULT_NOTEBOOK=Claude Notes` in the server environment.
+When `notebook` is omitted, UpNote chooses the user's current default notebook. `markdown` defaults to `true`; pass `false` for plain note text. `new_window` is optional on note creation and note opening and is omitted from the URL when unspecified.
 
 ## URL endpoint coverage
 
@@ -101,7 +101,6 @@ Set these in the `env` table of the server configuration or in the environment t
 
 ```toml
 [mcp_servers.upnote.env]
-UPNOTE_DEFAULT_NOTEBOOK = "Codex Notes"
 UPNOTE_DB = "/absolute/path/to/upnote.sqlite3"
 UPNOTE_SNAPSHOT_DIR = "/absolute/path/to/private/snapshot-parent"
 UPNOTE_URL_LIMIT = "100000"
@@ -109,7 +108,6 @@ UPNOTE_URL_LIMIT = "100000"
 
 | Setting | Default | Function |
 | --- | --- | --- |
-| `UPNOTE_DEFAULT_NOTEBOOK` | `Codex Notes` | Notebook name sent for notes without an explicit notebook. |
 | `UPNOTE_DB` | Platform detection | Full path to `upnote.sqlite3`. Required on Linux and other unsupported platforms. |
 | `UPNOTE_SNAPSHOT_DIR` | System temporary directory | Private parent directory for a unique per-process snapshot directory. |
 | `UPNOTE_URL_LIMIT` | `100000` | Maximum encoded URL length for every URL dispatch, including navigation. Must be a positive integer. |
