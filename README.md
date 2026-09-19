@@ -2,13 +2,36 @@
 
 `upnote-mcp-codex` is an unofficial Codex CLI-specific MCP server for the [UpNote](https://getupnote.com/) notetaking app.
 
-This repo is a forked refactor of [ahmedco88's UpNote MCP server for Claude Code](https://github.com/ahmedco88/upnote-mcp).
-
 This MCP server reads the notes that UpNote has synced to your computer and dispatches create, open, and navigation requests through UpNote's `upnote://` URL scheme. It does not use an account, cloud API, HTTP service, authentication layer, or plugin packaging.
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by UpNote or Thomas Dao. It reads an undocumented local database that may change in a future UpNote release. Back up your notes.
 
 URL support follows UpNote's [official x-callback-url endpoint reference](https://help.getupnote.com/resources/x-callback-url-endpoints). The server covers all seven documented endpoints: create a note, open a note, open a notebook, create a notebook, open a tag, open a filter, and dynamic view.
+
+## Changes from upstream repo
+
+Refactored fork of [ahmedco88/upnote-mcp](https://github.com/ahmedco88/upnote-mcp) with the following key enhancements:
+
+- **100% URL endpoint coverage**: Added `upnote_open_tag`, `upnote_open_filter`, and `upnote_view` (13 tools total).
+- **Codex CLI integration**: Dedicated registration commands, TOML configuration, tool filtering, and prompt instructions.
+- **Modular architecture**: Split the monolithic server into focused modules (`config`, `database`, `launcher`, `tools`, `server`).
+- **Robust note handling**: Notebook lookup by stable ID or title with disambiguation, native default notebook placement, and markdown/window toggles.
+- **Safe snapshot lifecycle**: Process-isolated snapshots with auto-cleanup, copy-race retries, integrity checks, and lazy DB discovery.
+- **Automated test suite**: Comprehensive tests (`test/server.test.mjs`) using synthetic fixtures with zero side effects on real notes.
+
+<!-- TOC -->
+
+- [Changes from upstream repo](#changes-from-upstream-repo)
+- [Setup with Codex CLI](#setup-with-codex-cli)
+- [Usage examples](#usage-examples)
+- [What it can do](#what-it-can-do)
+- [URL endpoint coverage](#url-endpoint-coverage)
+- [Environment settings](#environment-settings)
+- [Platform and validation notes](#platform-and-validation-notes)
+- [Tests](#tests)
+- [License](#license)
+
+<!-- /TOC -->
 
 ## Setup with Codex CLI
 
